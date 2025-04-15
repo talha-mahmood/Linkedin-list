@@ -1,0 +1,112 @@
+/* Button Styles - Inherit LinkedIn styles where possible */
+.lnc-categorizer-btn {
+  margin-left: 8px !important; /* Ensure spacing */
+  vertical-align: middle; /* Align with other buttons */
+}
+.lnc-categorizer-btn svg {
+  margin-right: 6px; /* Space between icon and text */
+}
+
+/* Panel Styles */
+.lnc-categorizer-panel {
+  position: fixed;
+  top: 70px; /* Below LinkedIn header */
+  right: 20px;
+  width: 320px;
+  max-height: calc(100vh - 90px);
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 10001; /* High z-index */
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, system-ui, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Fira Sans', Ubuntu, Oxygen, 'Oxygen Sans', Cantarell, 'Droid Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Lucida Grande', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: #333;
+  animation: lnc-slide-in 0.3s ease-out;
+}
+
+@keyframes lnc-slide-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.lnc-panel-header {
+  background-color: #f3f6f8;
+  color: #333;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.lnc-panel-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.lnc-panel-close {
+  background: none; border: none; color: #6e6e6e; cursor: pointer; font-size: 24px; line-height: 1; padding: 0;
+}
+.lnc-panel-close:hover { color: #333; }
+
+.lnc-panel-body {
+  overflow-y: auto;
+  padding: 16px;
+  flex: 1;
+}
+
+.lnc-connection-info { display: flex; align-items: center; margin-bottom: 16px; }
+.lnc-connection-avatar { width: 48px; height: 48px; border-radius: 50%; overflow: hidden; margin-right: 12px; flex-shrink: 0; }
+.lnc-connection-avatar img { width: 100%; height: 100%; object-fit: cover; background-color: #f0f0f0; }
+.lnc-connection-details { flex: 1; overflow: hidden; }
+.lnc-connection-name { font-weight: 600; font-size: 16px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lnc-connection-title { font-size: 12px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.lnc-category-section, .lnc-notes-section { margin-bottom: 16px; }
+.lnc-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.lnc-section-title { font-weight: 600; font-size: 14px; }
+.lnc-create-btn { background: none; border: none; color: #0077B5; font-size: 12px; cursor: pointer; padding: 0; font-weight: 500; }
+.lnc-create-btn:hover { text-decoration: underline; }
+
+.lnc-category-list { display: flex; flex-direction: column; gap: 8px; max-height: 150px; overflow-y: auto; padding-right: 4px; }
+.lnc-category-item { display: flex; align-items: center; }
+.lnc-category-checkbox { margin-right: 8px; width: 16px; height: 16px; accent-color: #0077B5; }
+.lnc-category-label { font-size: 14px; display: flex; align-items: center; cursor: pointer; }
+.lnc-category-color { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.lnc-no-categories { font-size: 13px; color: #666; font-style: italic; }
+
+.lnc-notes-input {
+  width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; font-size: 14px; resize: vertical; min-height: 60px;
+}
+.lnc-notes-input:focus { border-color: #0077B5; outline: none; box-shadow: 0 0 0 1px #0077B5; }
+
+.lnc-panel-footer {
+  padding: 12px 16px; border-top: 1px solid #eee; display: flex; justify-content: flex-end; gap: 8px;
+}
+
+/* Toast Notification */
+.lnc-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 10px 20px;
+  border-radius: 4px;
+  color: white;
+  font-size: 14px;
+  z-index: 10002; /* Above panel */
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  transform: translateY(100px);
+  opacity: 0;
+  pointer-events: none;
+}
+.lnc-toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+.lnc-toast.success { background-color: #2ECC71; }
+.lnc-toast.error { background-color: #E74C3C; }
+.lnc-toast.info { background-color: #3498DB; }

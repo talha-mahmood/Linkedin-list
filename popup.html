@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkedIn Network Categorizer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="logo">
+        <img src="assets/icons/icon48.png" alt="Logo">
+        <h1>Network Categorizer</h1>
+      </div>
+      <!-- Settings button switches to the settings tab -->
+      <button id="settings-tab-btn" class="icon-btn" title="Settings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+    </header>
+
+    <div id="status-message" class="status-message hidden"></div>
+
+    <div class="app-content">
+      <!-- Login View -->
+      <div id="login-container" class="container hidden">
+        <p>Connect your LinkedIn account to start categorizing your network.</p>
+        <button id="login-btn" class="primary-btn">Connect to LinkedIn (Mock)</button>
+      </div>
+
+      <!-- Main View -->
+      <div id="main-container" class="container hidden">
+        <div class="action-bar">
+          <div class="search-box">
+            <input type="text" id="search-input" placeholder="Search connections...">
+            <button id="search-btn" class="icon-btn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </button>
+          </div>
+          <button id="refresh-btn" class="icon-btn" title="Refresh Connections (Mock)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"></path>
+            </svg>
+          </button>
+        </div>
+
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="categories">Categories</button>
+          <button class="tab-btn" data-tab="connections">Connections</button>
+          <button class="tab-btn" data-tab="settings">Settings</button>
+        </div>
+
+        <!-- Categories Tab -->
+        <div id="categories-tab" class="tab-content active">
+          <div class="category-list">
+            <button id="add-category-btn" class="secondary-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              New Category
+            </button>
+            <div id="categories-container" class="scrollable-list"></div>
+          </div>
+        </div>
+
+        <!-- Connections Tab -->
+        <div id="connections-tab" class="tab-content">
+          <div class="filter-bar">
+            <div class="dropdown">
+              <button class="dropdown-btn">Filter by Category</button>
+              <div class="dropdown-content" id="category-filter">
+                <label><input type="checkbox" value="all" checked> All Categories</label>
+                <!-- Categories populated by JS -->
+              </div>
+            </div>
+            <div class="sort-options">
+              <select id="sort-select">
+                <option value="name">Name (A-Z)</option>
+                <option value="recent">Recently Added</option>
+                <option value="category">Category Count</option>
+              </select>
+            </div>
+          </div>
+          <div id="connections-container" class="connections-list scrollable-list"></div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings-tab" class="tab-content scrollable-list">
+          <h4>Data Management</h4>
+          <div class="form-group">
+            <button id="export-data-btn" class="secondary-btn">Export Data</button>
+            <p class="help-text">Download all categories and connections.</p>
+          </div>
+          <div class="form-group">
+            <label for="import-data">Import Data</label>
+            <div class="file-upload">
+              <input type="file" id="import-data" accept=".json">
+              <button id="import-data-btn" class="secondary-btn">Select File</button>
+            </div>
+            <p class="help-text">Import previously exported data.</p>
+          </div>
+          <hr>
+          <h4>Appearance</h4>
+          <div class="form-group">
+             <label>Theme</label>
+             <div class="theme-selector">
+                <div class="theme-option" data-theme="light">Light</div>
+                <div class="theme-option" data-theme="dark">Dark</div>
+                <div class="theme-option" data-theme="system">System</div>
+             </div>
+          </div>
+          <hr>
+           <h4>Danger Zone</h4>
+           <div class="form-group">
+             <button id="clear-data-btn" class="danger-btn">Clear All Data</button>
+             <p class="help-text">Delete all categories and connections.</p>
+           </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="app-footer">
+      <div class="sync-status">Last synced: <span id="last-sync">Never</span></div>
+      <button id="help-btn" class="text-btn">Help</button>
+    </footer>
+  </div>
+
+  <!-- Category Modal -->
+  <div id="category-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="category-modal-title">Add New Category</h2>
+        <button class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="category-name">Category Name</label>
+          <input type="text" id="category-name" placeholder="e.g., Developers">
+        </div>
+        <div class="form-group">
+          <label for="category-color">Color</label>
+          <div class="color-picker">
+            <input type="color" id="category-color" value="#0077B5">
+            <div class="color-presets">
+              <span class="color-preset" style="background-color: #0077B5"></span>
+              <span class="color-preset" style="background-color: #2ECC71"></span>
+              <span class="color-preset" style="background-color: #E74C3C"></span>
+              <span class="color-preset" style="background-color: #F39C12"></span>
+              <span class="color-preset" style="background-color: #9B59B6"></span>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="category-icon">Icon</label>
+          <div class="icon-selector" id="icon-selector">
+            <!-- Icons populated by JS -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancel-category-btn" class="secondary-btn">Cancel</button>
+        <button id="save-category-btn" class="primary-btn">Save Category</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/popup.js"></script>
+</body>
+</html>

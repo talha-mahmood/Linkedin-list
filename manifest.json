@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn Network Categorizer",
+  "version": "1.0.0",
+  "description": "Organize your LinkedIn connections into custom categories for better network management",
+  
+  "action": {
+    "default_popup": "popup.html"
+    
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "identity"
+  ],
+  "host_permissions": [
+    "https://www.linkedin.com/*"
+  ],
+  "background": {
+    "service_worker": "js/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.linkedin.com/in/*"],
+      "css": ["css/content.css"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/*", "onboarding.html", "help.html", "privacy.html"],
+      "matches": ["<all_urls>"]
+    }
+    ] 
+  }
