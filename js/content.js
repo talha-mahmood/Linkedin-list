@@ -1,6 +1,7 @@
 (function() {
   // Constants
   const EXTENSION_PREFIX = 'lnc'; // LinkedIn Network Categorizer
+  const BUTTON_ID = `${EXTENSION_PREFIX}-categorize-btn`;
 
   // State
   let state = {
@@ -12,6 +13,7 @@
 
   // --- Initialization ---
   function initialize() {
+    console.log(`${EXTENSION_PREFIX}: Initializing extension`);
     chrome.storage.local.get(['categories', 'connections'], function(data) {
       state.categories = data.categories || [];
       state.connections = data.connections || [];
@@ -35,125 +37,187 @@
   }
 
   function observePageChanges() {
+    console.log(`${EXTENSION_PREFIX}: Setting up page observer`);
     const observer = new MutationObserver(mutations => {
-      // Use requestAnimationFrame to avoid excessive checks during rapid DOM changes
+      // Use requestAnimationFrame for performance
       window.requestAnimationFrame(checkForProfilePage);
     });
     observer.observe(document.body, { childList: true, subtree: true });
-    // Listen for SPA navigation events if MutationObserver is insufficient
     window.addEventListener('popstate', checkForProfilePage);
-    // Potentially add listeners for pushState/replaceState if needed
   }
 
   function checkForProfilePage() {
     const currentUrl = window.location.href;
     const profileMatch = currentUrl.match(/linkedin\.com\/in\/([^\/?#]+)/);
+    const buttonExists = document.getElementById(BUTTON_ID);
 
     if (profileMatch && profileMatch[1]) {
       const profileId = profileMatch[1];
+      console.log(`${EXTENSION_PREFIX}: On profile page for: ${profileId}`);
+      
       if (profileId !== state.currentProfileId) {
          state.currentProfileId = profileId;
          hidePanel();
+         if (buttonExists) buttonExists.remove(); // Clean up
       }
 
-      if (!document.getElementById(`${EXTENSION_PREFIX}-categorize-btn`)) {
-        // Updated and expanded selectors - Check LinkedIn's current structure if these fail
-        const potentialSelectors = [
-            '.pvs-profile-actions',                                  // Primary modern selector
-            'div.pv-top-card-v2__actions',                           // Another common top card actions container
-            'div.pv-top-card__button-container',                     // Older structure
-            'div[data-control-name="profile_topcard_primary_actions"]', // Attribute selector
-            // Find a container near the 'Connect' or 'Message' button as a fallback
-            'button[aria-label*="Invite"][aria-label*="to connect"]',
-            'button[aria-label*="Send message"]',
-            'button[aria-label*="Follow"]',
-            'button[aria-label*="More actions"]'
+      if (!document.getElementById(BUTTON_ID)) {
+        console.log(`${EXTENSION_PREFIX}: Button not found, attempting to inject`);
+        
+        // IMPROVED APPROACH: Find multiple potential containers and try each
+        const containerSelectors = [
+          '.pv-top-card__actions',
+          '.pv-top-card-v2__actions',
+          '.pvs-profile-actions',
+          '.pv-top-card__links',
+          '.pv-s-profile-actions',
+          '.pv-top-card__action-buttons',
+          '.profile-header__actions',
+          // Add additional possible selectors to increase chance of finding a container
+          'section.artdeco-card.ember-view.pv-top-card',
+          '.ph5.pb5' // More general container that might contain actions
         ];
+        
+        // Step 1: Try explicit containers first
+        for (const selector of containerSelectors) {
+          const container = document.querySelector(selector);
+          if (container) {
+            console.log(`${EXTENSION_PREFIX}: Found container using selector: ${selector}`);
+            insertCategorizeButton(container);
+            return; // Exit once button is injected
+          }
+        }
+        
+        // Step 2: If no containers found, try to find by looking for other LinkedIn buttons
+        const buttonSelectors = [
+          'button[aria-label*="Connect"]', 
+          'button[aria-label*="Message"]',
+          'button[aria-label*="Follow"]',
+          'button[aria-label*="More actions"]',
+          // More general button selectors
+          '.artdeco-button'
+        ];
+        
+        for (const selector of buttonSelectors) {
+          const linkedinButton = document.querySelector(selector);
+          if (linkedinButton) {
+            let container = linkedinButton.closest('.pv-top-card__actions') || 
+                           linkedinButton.closest('.pvs-profile-actions') || 
+                           linkedinButton.parentElement;
+                           
+            if (container) {
+              console.log(`${EXTENSION_PREFIX}: Found container via LinkedIn button: ${selector}`);
+              insertCategorizeButton(container);
+              return;
+            }
+          }
+        }
 
-        waitForElement(potentialSelectors.join(', '), 7000).then(foundElement => { // Increased timeout slightly
-            let actionsContainer = null;
-
-            // If we found a button, try to get its parent container
-            if (foundElement.tagName === 'BUTTON') {
-                // Look for a common parent div that holds multiple action buttons
-                actionsContainer = foundElement.closest('.pvs-profile-actions, .pv-top-card-v2__actions, .pv-top-card__button-container');
-                // If specific containers aren't found, just use the button's direct parent
-                if (!actionsContainer) {
-                    actionsContainer = foundElement.parentElement;
+        // Step 3: If still not inserted, try again after a delay (LinkedIn might be loading)
+        console.log(`${EXTENSION_PREFIX}: Scheduling delayed injection attempt`);
+        setTimeout(() => {
+          if (!document.getElementById(BUTTON_ID)) {
+            // Final attempt - look for any section near the top that might hold our button
+            const headingElement = document.querySelector('h1.text-heading-xlarge');
+            if (headingElement) {
+              let possibleContainer = null;
+              
+              // Try to find a container by navigating up from the name heading
+              let element = headingElement;
+              for (let i = 0; i < 5; i++) { // Check up to 5 levels up
+                element = element.parentElement;
+                if (!element || element === document.body) break;
+                
+                // Look for child elements that look like button containers
+                const childDivs = element.querySelectorAll('div');
+                for (const div of childDivs) {
+                  if (div.querySelector('button') || div.childElementCount > 1) {
+                    possibleContainer = div;
+                    break;
+                  }
                 }
-            } else {
-                // If we found a container directly
-                actionsContainer = foundElement;
+                if (possibleContainer) break;
+              }
+              
+              if (possibleContainer) {
+                console.log(`${EXTENSION_PREFIX}: Found potential container via DOM traversal`);
+                insertCategorizeButton(possibleContainer);
+              } else {
+                console.log(`${EXTENSION_PREFIX}: Creating our own button container as last resort`);
+                // Create our own container as last resort
+                const newContainer = document.createElement('div');
+                newContainer.className = 'lnc-custom-container';
+                newContainer.style.margin = '10px 0';
+                
+                // Insert after the heading or nearby
+                if (headingElement.nextElementSibling) {
+                  headingElement.parentElement.insertBefore(newContainer, headingElement.nextElementSibling);
+                } else {
+                  headingElement.parentElement.appendChild(newContainer);
+                }
+                
+                insertCategorizeButton(newContainer);
+              }
             }
-
-            // Final check if we have a valid container
-            if (actionsContainer && actionsContainer.tagName !== 'BODY' && !document.getElementById(`${EXTENSION_PREFIX}-categorize-btn`)) {
-                insertCategorizeButton(actionsContainer);
-            } else if (!actionsContainer) {
-                console.warn(`${EXTENSION_PREFIX}: Could not reliably find a suitable container for the categorize button.`);
-            }
-        }).catch(err => {
-           console.error(`${EXTENSION_PREFIX}: Error finding profile actions container using selectors: ${potentialSelectors.join(', ')}`, err);
-        });
+          }
+        }, 2000); // Wait 2 seconds for LinkedIn to fully render
       }
     } else {
+      // Not on a profile page
       if (state.currentProfileId) {
-          state.currentProfileId = null;
-          hidePanel(); // Hide panel when navigating away
+        console.log(`${EXTENSION_PREFIX}: Navigated away from profile`);
+        state.currentProfileId = null;
+        hidePanel();
       }
-      const catButton = document.getElementById(`${EXTENSION_PREFIX}-categorize-btn`);
-      if (catButton) catButton.remove();
+      
+      if (buttonExists) buttonExists.remove();
     }
   }
 
-  function waitForElement(selector, timeout = 5000) {
-    return new Promise((resolve, reject) => {
-      const element = document.querySelector(selector);
-      if (element) return resolve(element);
-
-      let observer; // Declare observer variable
-      const timeoutId = setTimeout(() => {
-        if (observer) observer.disconnect(); // Check if observer exists before disconnecting
-        reject(new Error(`Element ${selector} not found within ${timeout}ms`));
-      }, timeout);
-
-      observer = new MutationObserver(mutations => { // Assign observer here
-        const element = document.querySelector(selector);
-        if (element) {
-          clearTimeout(timeoutId);
-          observer.disconnect();
-          resolve(element);
-        }
-      });
-      observer.observe(document.body, { childList: true, subtree: true });
-    });
-  }
-
-  // --- UI Injection ---
   function insertCategorizeButton(container) {
+    if (document.getElementById(BUTTON_ID)) {
+      return; // Prevent duplication
+    }
+    
+    console.log(`${EXTENSION_PREFIX}: Creating button`);
     const button = document.createElement('button');
-    button.id = `${EXTENSION_PREFIX}-categorize-btn`;
-    button.className = `${EXTENSION_PREFIX}-categorizer-btn artdeco-button artdeco-button--secondary artdeco-button--muted`; // Use LinkedIn classes
+    button.id = BUTTON_ID;
+    button.className = `${EXTENSION_PREFIX}-categorizer-btn artdeco-button artdeco-button--2 artdeco-button--secondary`;
     button.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" data-supported-dps="16x16" fill="currentColor" class="mercado-match" width="16" height="16" focusable="false">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
         <path d="M10 1L9 0H2a1 1 0 00-1 1v11a1 1 0 001 1h1V3a1 1 0 011-1h6zm5 2H5a1 1 0 00-1 1v11a1 1 0 001 1h10a1 1 0 001-1V4a1 1 0 00-1-1zM8 6h5v1H8zm5 3H8v1h5zM8 11h5v1H8z"></path>
       </svg>
-      <span class="artdeco-button__text">Categorize</span>`; // Use LinkedIn text class
+      <span class="artdeco-button__text">Categorize</span>`;
+    button.style.marginLeft = '8px';
     button.addEventListener('click', toggleCategoryPanel);
 
-    // Try to insert intelligently relative to existing buttons
-    const moreButton = container.querySelector('button[aria-label*="More actions"]');
-    const connectButton = container.querySelector('button[aria-label*="Invite"][aria-label*="to connect"], button[aria-label*="Send message"], button[aria-label*="Follow"]');
-
-    if (moreButton && moreButton.parentElement === container) {
-        // Insert before the 'More' button if possible
+    try {
+      // First try to place it next to other buttons
+      const moreButton = container.querySelector('button[aria-label*="More actions"]');
+      const connectButton = container.querySelector('button[aria-label*="Connect"], button[aria-label*="Message"], button[aria-label*="Follow"]');
+      
+      if (moreButton) {
         container.insertBefore(button, moreButton);
-    } else if (connectButton && connectButton.parentElement === container) {
-        // Otherwise, insert after the primary action button
-        container.insertBefore(button, connectButton.nextSibling);
-    } else {
-        // Fallback: append to the end
+      } else if (connectButton) {
+        if (connectButton.nextSibling) {
+          container.insertBefore(button, connectButton.nextSibling);
+        } else {
+          container.appendChild(button);
+        }
+      } else {
+        // Just append it
         container.appendChild(button);
+      }
+      
+      console.log(`${EXTENSION_PREFIX}: Button added successfully`);
+    } catch (error) {
+      console.error(`${EXTENSION_PREFIX}: Error adding button:`, error);
+      try {
+        // Fallback
+        container.appendChild(button);
+      } catch (e) {
+        console.error(`${EXTENSION_PREFIX}: Final attempt failed:`, e);
+      }
     }
   }
 
@@ -162,7 +226,6 @@
     if (state.panelVisible) {
       hidePanel();
     } else {
-      // Reload categories/connections before showing
       chrome.storage.local.get(['categories', 'connections'], function(data) {
           state.categories = data.categories || [];
           state.connections = data.connections || [];
@@ -252,14 +315,13 @@
   // --- Data Handling ---
   function extractProfileData() {
     let name = '', title = '', avatar = '';
-    // Use more specific selectors based on current LinkedIn structure
     const nameElement = document.querySelector('h1.text-heading-xlarge');
     const titleElement = document.querySelector('div.text-body-medium.break-words');
     const avatarElement = document.querySelector('.pv-top-card-profile-picture__image, .profile-photo-edit__preview');
 
     if (nameElement) name = nameElement.textContent.trim();
     if (titleElement) title = titleElement.textContent.trim();
-    if (avatarElement) avatar = avatarElement.src || avatarElement.style.backgroundImage.slice(5, -2); // Handle src or background-image
+    if (avatarElement) avatar = avatarElement.src || avatarElement.style.backgroundImage.slice(5, -2);
 
     return { name, title, avatar };
   }
@@ -283,7 +345,7 @@
     const selectedCategories = Array.from(document.querySelectorAll(`.${EXTENSION_PREFIX}-category-checkbox:checked`))
                                   .map(cb => cb.getAttribute('data-category-id'));
     const notes = document.querySelector(`.${EXTENSION_PREFIX}-notes-input`).value;
-    const profileData = extractProfileData(); // Re-extract in case it changed
+    const profileData = extractProfileData();
 
     const connection = {
       id: state.currentProfileId,
@@ -293,7 +355,7 @@
       profileUrl: window.location.href,
       categories: selectedCategories,
       notes: notes,
-      addedAt: state.connections.find(c => c.id === state.currentProfileId)?.addedAt || Date.now(), // Preserve addedAt if exists
+      addedAt: state.connections.find(c => c.id === state.currentProfileId)?.addedAt || Date.now(),
       updatedAt: Date.now()
     };
 
@@ -307,13 +369,11 @@
     chrome.storage.local.set({ connections: state.connections }, function() {
       showToast('Connection categorized successfully!');
       hidePanel();
-      // Notify popup if open
       chrome.runtime.sendMessage({ action: 'connectionsUpdated' }).catch(err => {});
     });
   }
 
   function openCreateCategoryModal() {
-    // Send message to background/popup to handle opening the modal
     chrome.runtime.sendMessage({ action: 'openCategoryModal' });
   }
 
@@ -322,17 +382,16 @@
     if (!toast) {
       toast = document.createElement('div');
       toast.id = `${EXTENSION_PREFIX}-toast`;
-      // Apply styles via CSS class instead of inline styles
       toast.className = `${EXTENSION_PREFIX}-toast`;
       document.body.appendChild(toast);
     }
     toast.textContent = message;
-    toast.classList.remove('success', 'error', 'info', 'show'); // Reset classes
+    toast.classList.remove('success', 'error', 'info', 'show');
     toast.classList.add(type, 'show');
     setTimeout(() => toast.classList.remove('show'), 3000);
   }
 
   // --- Start ---
+  console.log(`${EXTENSION_PREFIX}: Content script loaded`);
   initialize();
-
 })();

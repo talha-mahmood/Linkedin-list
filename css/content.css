@@ -2,7 +2,23 @@
 .lnc-categorizer-btn {
   margin-left: 8px !important; /* Ensure spacing */
   vertical-align: middle; /* Align with other buttons */
+  background-color: #0a66c2 !important; /* Use LinkedIn blue for visibility */
+  color: white !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 6px 16px !important;
+  border-radius: 16px !important;
+  font-weight: 600 !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
 }
+
+.lnc-categorizer-btn:hover {
+  background-color: #004182 !important;
+}
+
 .lnc-categorizer-btn svg {
   margin-right: 6px; /* Space between icon and text */
 }
@@ -110,3 +126,10 @@
 .lnc-toast.success { background-color: #2ECC71; }
 .lnc-toast.error { background-color: #E74C3C; }
 .lnc-toast.info { background-color: #3498DB; }
+
+/* For our custom container if needed */
+.lnc-custom-container {
+  display: flex;
+  margin: 10px 0;
+  padding: 0 16px;
+}

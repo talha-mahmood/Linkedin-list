@@ -22,6 +22,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.linkedin.com/in/*"],
+      "js": ["js/content.js"], 
       "css": ["css/content.css"]
     }
   ],
@@ -30,5 +31,5 @@
       "resources": ["assets/*", "onboarding.html", "help.html", "privacy.html"],
       "matches": ["<all_urls>"]
     }
-    ] 
-  }
+  ] 
+}
