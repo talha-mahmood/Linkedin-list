@@ -71,6 +71,29 @@ document.addEventListener('DOMContentLoaded', function() {
       setupColorPresets(); // Call setup for presets
       setupIconSelector();
       setupEventListeners();
+
+      // Check if there are any pending category modal requests
+      chrome.storage.local.get('categoryModalRequest', function(data) {
+        if (data.categoryModalRequest) {
+          const request = data.categoryModalRequest;
+          
+          // Only process recent requests (within last 30 seconds)
+          if (Date.now() - request.timestamp < 30000) {
+            console.log('Processing pending category modal request');
+            
+            // Clear the request immediately to prevent duplicate processing
+            chrome.storage.local.remove('categoryModalRequest');
+            
+            // Open the category modal
+            setTimeout(() => {
+              openAddCategoryModal();
+            }, 300); // Small delay to ensure the UI is ready
+          } else {
+            // Clean up old requests
+            chrome.storage.local.remove('categoryModalRequest');
+          }
+        }
+      });
     });
   }
 
@@ -128,13 +151,17 @@ document.addEventListener('DOMContentLoaded', function() {
     if (state.filters.search) {
       const searchTerm = state.filters.search.toLowerCase();
       filteredConnections = filteredConnections.filter(conn =>
-        conn.name.toLowerCase().includes(searchTerm) ||
-        (conn.title && conn.title.toLowerCase().includes(searchTerm))
+        (conn.profileUrl && conn.profileUrl.toLowerCase().includes(searchTerm))
       );
     }
 
     filteredConnections.sort((a, b) => {
-      if (state.sort === 'name') return a.name.localeCompare(b.name);
+      if (state.sort === 'name') {
+        // Sort by profile URL if names are not available
+        const urlA = a.profileUrl || "";
+        const urlB = b.profileUrl || "";
+        return urlA.localeCompare(urlB);
+      }
       if (state.sort === 'recent') return (b.addedAt || 0) - (a.addedAt || 0);
       if (state.sort === 'category') return (b.categories?.length || 0) - (a.categories?.length || 0);
       return 0;
@@ -145,25 +172,43 @@ document.addEventListener('DOMContentLoaded', function() {
       html = `<div class="empty-state"><p>No connections match filters.</p></div>`;
     } else {
       filteredConnections.forEach(connection => {
-        let categoriesHTML = connection.categories?.map(catId => {
-          const category = state.categories.find(c => c.id === catId);
-          return category ? `<span class="category-tag" style="background-color: ${category.color}25; color: ${category.color}">${category.name}</span>` : '';
-        }).join('') || '';
+        // Remove the displayName variable and name display entirely
+        
+        // Get category names for this connection
+        let categoriesHTML = '';
+        if (connection.categories && connection.categories.length > 0) {
+          categoriesHTML = connection.categories.map(catId => {
+            const category = state.categories.find(c => c.id === catId);
+            return category ? 
+              `<span class="category-tag" style="background-color: ${category.color}25; color: ${category.color}">${category.name}</span>` : 
+              '';
+          }).join('');
+        }
 
+        // Generate the connection item HTML without the name
         html += `
-          <div class="connection-item" data-id="${connection.id}" title="View ${connection.name} on LinkedIn">
-            <div class="connection-avatar">
-              <img src="${connection.avatar || 'assets/icons/icon48.png'}" alt="${connection.name}">
-            </div>
+          <div class="connection-item" data-id="${connection.id || ''}" title="${connection.profileUrl || ''}">
             <div class="connection-info">
-              <div class="connection-name">${connection.name}</div>
-              <div class="connection-title">${connection.title || ''}</div>
-              <div class="connection-categories">${categoriesHTML}</div>
+              <div class="connection-url">
+                <a href="${connection.profileUrl || '#'}" target="_blank">
+                  ${connection.profileUrl ? connection.profileUrl.replace(/https?:\/\/(www\.)?linkedin\.com\/in\//i, '') : 'No URL'}
+                </a>
+              </div>
+              <div class="connection-categories">${categoriesHTML || '<span class="no-categories">No categories</span>'}</div>
             </div>
           </div>`;
       });
     }
     connectionsContainer.innerHTML = html;
+    
+    // Update stats if available
+    if (document.getElementById('export-connections-count')) {
+      document.getElementById('export-connections-count').textContent = state.connections.length;
+    }
+    if (document.getElementById('export-categories-count')) {
+      document.getElementById('export-categories-count').textContent = state.categories.length;
+    }
+    
     addConnectionActionListeners();
   }
 
@@ -354,14 +399,51 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // --- Category Management ---
   function openAddCategoryModal() {
+    const categoryModal = document.getElementById('category-modal');
+    const categoryNameInput = document.getElementById('category-name');
+    const categoryColorInput = document.getElementById('category-color');
+    
+    if (!categoryModal) {
+      console.error('Category modal not found!');
+      return;
+    }
+    
     state.currentCategory = null;
-    categoryModalTitle.textContent = 'Add New Category';
-    categoryNameInput.value = '';
-    categoryColorInput.value = '#0077B5'; // Default hex color
-    document.querySelectorAll('.icon-option').forEach(opt => opt.classList.remove('selected'));
-    document.querySelector('.icon-option[data-icon="users"]')?.classList.add('selected'); // Default icon
+    
+    if (document.getElementById('category-modal-title')) {
+      document.getElementById('category-modal-title').textContent = 'Add New Category';
+    }
+    
+    if (categoryNameInput) {
+      categoryNameInput.value = '';
+    }
+    
+    if (categoryColorInput) {
+      categoryColorInput.value = '#0077B5'; // Default color
+    }
+    
+    // Reset icon selection
+    const iconOptions = document.querySelectorAll('.icon-option');
+    iconOptions.forEach(opt => opt.classList.remove('selected'));
+    
+    // Select default icon
+    const defaultIcon = document.querySelector('.icon-option[data-icon="users"]');
+    if (defaultIcon) {
+      defaultIcon.classList.add('selected');
+    } else if (iconOptions.length > 0) {
+      // If specific icon not found, select the first one
+      iconOptions[0].classList.add('selected');
+    }
+    
+    // Show the modal
     categoryModal.classList.remove('hidden');
-    categoryNameInput.focus();
+    
+    // Focus on name input if it exists
+    if (categoryNameInput) {
+      categoryNameInput.focus();
+    }
+    
+    console.log('Category modal opened');
   }
 
   function openEditCategoryModal(category) {
@@ -450,20 +532,39 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function handleExportData() {
       showStatusMessage('Exporting data...', 'info');
+      
+      // First check if there are connections to export
+      if (!state.connections || state.connections.length === 0) {
+        showStatusMessage('No connections to export', 'error');
+        setTimeout(hideStatusMessage, 2000);
+        return;
+      }
+      
       chrome.runtime.sendMessage({ action: 'exportData' }, function(response) {
-          if (response?.success && response.url) {
-              const a = document.createElement('a');
-              a.style.display = 'none';
-              a.href = response.url;
-              a.download = `linkedin-categorizer-export-${new Date().toISOString().split('T')[0]}.json`;
-              document.body.appendChild(a);
-              a.click();
-              setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(response.url); }, 100);
-              showStatusMessage('Data exported!', 'success');
-          } else {
-              showStatusMessage('Export failed', 'error');
-          }
-          setTimeout(hideStatusMessage, 2000);
+        if (response?.success && response.data) {
+          // Create a blob from the data in the popup context
+          const blob = new Blob([response.data], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          
+          // Create and trigger download link
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = response.filename || `linkedin-connections-export-${new Date().toISOString().split('T')[0]}.json`;
+          document.body.appendChild(a);
+          a.click();
+          
+          // Cleanup
+          setTimeout(() => { 
+            document.body.removeChild(a); 
+            URL.revokeObjectURL(url); 
+          }, 100);
+          
+          showStatusMessage(`Exported ${response.count} connections!`, 'success');
+        } else {
+          showStatusMessage('Export failed: ' + (response?.error || 'Unknown error'), 'error');
+        }
+        setTimeout(hideStatusMessage, 2000);
       });
   }
 
@@ -506,9 +607,48 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // --- Utility Functions ---
   function switchTab(tabId) {
-    tabButtons.forEach(button => button.classList.toggle('active', button.getAttribute('data-tab') === tabId));
-    tabContents.forEach(content => content.classList.toggle('active', content.id === tabId + '-tab'));
-    settingsTabBtn.classList.toggle('active', tabId === 'settings'); // Highlight settings icon if settings tab active
+    console.log(`Switching to tab: ${tabId}`);
+    
+    // Verify elements exist
+    const allTabButtons = document.querySelectorAll('.tab-btn');
+    const allTabContents = document.querySelectorAll('.tab-content');
+    const settingsButton = document.getElementById('settings-tab-btn');
+    
+    if (allTabButtons.length === 0) {
+      console.error('No tab buttons found!');
+    }
+    
+    if (allTabContents.length === 0) {
+      console.error('No tab content elements found!');
+    }
+    
+    // Set active class on appropriate tab button
+    allTabButtons.forEach(button => {
+      const buttonTab = button.getAttribute('data-tab');
+      if (buttonTab === tabId) {
+        button.classList.add('active');
+      } else {
+        button.classList.remove('active');
+      }
+    });
+    
+    // Set active class on appropriate tab content
+    allTabContents.forEach(content => {
+      if (content.id === `${tabId}-tab`) {
+        content.classList.add('active');
+      } else {
+        content.classList.remove('active');
+      }
+    });
+    
+    // Handle settings tab button separately if it exists
+    if (settingsButton) {
+      if (tabId === 'settings') {
+        settingsButton.classList.add('active');
+      } else {
+        settingsButton.classList.remove('active');
+      }
+    }
   }
 
   function showStatusMessage(message, type = 'info') {
@@ -526,17 +666,28 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function setupIconSelector() {
+    const iconSelector = document.getElementById('icon-selector');
+    // Check if the element exists before trying to set its innerHTML
+    if (!iconSelector) {
+      console.error('Icon selector element not found! Check HTML structure.');
+      return; // Exit the function if the element doesn't exist
+    }
+    
     let iconsHTML = icons.map(icon => `
       <div class="icon-option" data-icon="${icon}" title="${icon}">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${getIconPath(icon)}</svg>
       </div>`).join('');
+    
     iconSelector.innerHTML = iconsHTML;
-    iconSelector.addEventListener('click', function(e) {
-        const target = e.target.closest('.icon-option');
-        if (target) {
-            document.querySelectorAll('.icon-option').forEach(opt => opt.classList.remove('selected'));
-            target.classList.add('selected');
-        }
+    
+    // Add click event listeners to icon options
+    iconSelector.querySelectorAll('.icon-option').forEach(option => {
+      option.addEventListener('click', function() {
+        // Remove selected class from all options
+        iconSelector.querySelectorAll('.icon-option').forEach(opt => opt.classList.remove('selected'));
+        // Add selected class to clicked option
+        this.classList.add('selected');
+      });
     });
   }
 
@@ -559,21 +710,43 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function getIconPath(icon) {
-    // Simple SVG paths - add more as needed
     switch(icon) {
-      case 'code': return '<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>';
-      case 'briefcase': return '<rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>';
-      case 'users': return '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>';
-      case 'brain': return '<path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v1.77c.6.27 1.13.65 1.59 1.11A5.03 5.03 0 0 1 16 9.5c0 .88-.23 1.7-.63 2.41a5.5 5.5 0 0 1-1.16 1.68l.02.02c.7.7 1.17 1.66 1.17 2.71 0 1.05-.47 2.01-1.17 2.71l-.02.02a5.5 5.5 0 0 1-1.16 1.68C13.7 21.77 12.88 22 12 22s-1.7-.23-2.41-.63a5.5 5.5 0 0 1-1.68-1.16l-.02-.02c-.7-.7-1.17-1.66-1.17-2.71 0-1.05.47-2.01 1.17-2.71l.02-.02a5.5 5.5 0 0 1 1.16-1.68C8.23 11.2 8 10.38 8 9.5c0-1.1.43-2.1 1.11-2.89A4.49 4.49 0 0 1 10.5 5.18V4.5A2.5 2.5 0 0 1 13 2h-1.5zM12 6a3.5 3.5 0 0 0-3.5 3.5c0 .68.19 1.3.52 1.82A3.5 3.5 0 0 0 12 13a3.5 3.5 0 0 0 3.5-3.5c0-.68-.19-1.3-.52-1.82A3.5 3.5 0 0 0 12 6z"></path>'; // More detailed brain
-      case 'chart': return '<path d="M3 3v18h18"></path><path d="M18 12V8"></path><path d="M14 12V6"></path><path d="M10 12V10"></path><path d="M6 12v-2"></path>';
-      case 'database': return '<ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>';
-      case 'globe': return '<circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>';
-      case 'message': return '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>';
-      case 'phone': return '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 a19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>';
-      case 'star': return '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>';
-      case 'heart': return '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>';
-      case 'flag': return '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line>';
-      default: return '<circle cx="12" cy="12" r="10"></circle>'; // Default circle
+      case 'briefcase': 
+        return '<rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>';
+      case 'users': 
+        return '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>';
+      case 'code':
+        return '<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>';
+      case 'brain':
+        return '<circle cx="12" cy="12" r="9"></circle><path d="M12 17v-2"></path><path d="M12 9V7"></path>';
+      case 'chart':
+        return '<path d="M3 3v18h18"></path><path d="M18 12V8"></path><path d="M14 12V6"></path><path d="M10 12V10"></path><path d="M6 12v-2"></path>';
+      case 'database':
+        return '<ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>';
+      case 'globe':
+        return '<circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>';
+      case 'message':
+        return '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>';
+      case 'phone':
+        return '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path>';
+      case 'star':
+        return '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>';
+      case 'heart':
+        return '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>';
+      case 'flag':
+        return '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line>';
+      default:
+        return '<circle cx="12" cy="12" r="10"></circle>'; // Default circle as fallback
+    }
+  }
+
+  // Add this function to handle API calls safely
+  function safeApiCall(fn) {
+    try {
+      return fn();
+    } catch (error) {
+      console.error('API call error:', error);
+      return null;
     }
   }
 

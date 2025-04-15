@@ -44,11 +44,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === 'openCategoryModal') {
-    // Try to focus existing popup or open it - This is tricky from background
-    // Best effort: send message back to content script or rely on user clicking icon
     console.log("Request to open category modal received.");
-    // Consider sending a message to the active tab's content script if needed
-    return false; // No async response needed here
+    
+    // Store the request data temporarily in storage for the popup to access
+    chrome.storage.local.set({
+      categoryModalRequest: {
+        timestamp: Date.now(),
+        fromProfileId: request.fromProfileId,
+        profileData: request.profileData,
+        source: request.source || 'unknown'
+      }
+    }, () => {
+      // Try to open the popup programmatically (will work in some browsers)
+      try {
+        // This works in some browsers but may fail in others
+        chrome.action.openPopup().catch(err => {
+          console.log("Could not open popup automatically");
+        });
+      } catch (err) {
+        console.log("Browser doesn't support programmatic popup opening");
+      }
+      
+      // Signal success back to content script
+      sendResponse({ 
+        success: true, 
+        message: "Category modal request registered. Extension popup may need to be opened manually."
+      });
+    });
+    
+    return true; // Indicates async response
   }
 
   if (request.action === 'exportData') {
@@ -98,22 +122,52 @@ function generateMockConnections() {
 }
 
 function exportData(sendResponse) {
-  chrome.storage.local.get(['categories', 'connections', 'settings'], function(data) {
-    const exportObj = {
-      categories: data.categories || [],
-      connections: data.connections || [],
-      settings: data.settings || {},
-      exportDate: new Date().toISOString(),
-      version: chrome.runtime.getManifest().version
+  chrome.storage.local.get(['categories', 'connections'], function(data) {
+    // Format data for export, focusing only on profileUrl and categories
+    const exportData = {
+      timestamp: new Date().toISOString(),
+      connections: []
     };
+    
+    // Process each connection
+    if (data.connections && data.connections.length > 0) {
+      data.connections.forEach(connection => {
+        // Get readable category names instead of just IDs
+        const categoryNames = (connection.categories || []).map(catId => {
+          const category = (data.categories || []).find(c => c.id === catId);
+          return category ? category.name : 'Unknown Category';
+        });
+        
+        // Add connection WITHOUT name field - only profileUrl and categories
+        exportData.connections.push({
+          profileUrl: connection.profileUrl || 'No URL',
+          categories: categoryNames
+        });
+      });
+    }
+    
     try {
-      const jsonData = JSON.stringify(exportObj, null, 2); // Pretty print JSON
-      const blob = new Blob([jsonData], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      sendResponse({ success: true, url: url });
+      // Send the raw JSON data to the popup
+      const jsonData = JSON.stringify(exportData, null, 2);
+      
+      // Generate filename with date
+      const date = new Date();
+      const dateString = date.toISOString().split('T')[0];
+      const filename = `linkedin-connections-${dateString}.json`;
+      
+      // Return the export data
+      sendResponse({
+        success: true,
+        data: jsonData,
+        filename: filename,
+        count: exportData.connections.length
+      });
     } catch (error) {
       console.error("Export error:", error);
-      sendResponse({ success: false, error: "Failed to generate export file." });
+      sendResponse({
+        success: false,
+        error: "Failed to generate export file: " + error.message
+      });
     }
   });
 }

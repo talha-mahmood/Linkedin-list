@@ -75,12 +75,71 @@
   flex: 1;
 }
 
-.lnc-connection-info { display: flex; align-items: center; margin-bottom: 16px; }
-.lnc-connection-avatar { width: 48px; height: 48px; border-radius: 50%; overflow: hidden; margin-right: 12px; flex-shrink: 0; }
-.lnc-connection-avatar img { width: 100%; height: 100%; object-fit: cover; background-color: #f0f0f0; }
-.lnc-connection-details { flex: 1; overflow: hidden; }
-.lnc-connection-name { font-weight: 600; font-size: 16px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lnc-connection-title { font-size: 12px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lnc-connection-info {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 12px;
+}
+
+.lnc-connection-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.lnc-connection-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background-color: #f0f0f0;
+}
+
+.lnc-connection-details {
+  flex: 1;
+  overflow: hidden;
+}
+
+.lnc-connection-name {
+  font-weight: 600;
+  font-size: 18px;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lnc-connection-title {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lnc-connection-url {
+  font-size: 14px;
+  color: #0077b5;
+  margin-top: 4px;
+  margin-bottom: 8px;
+  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lnc-connection-url a {
+  color: #0077b5;
+  text-decoration: none;
+}
+
+.lnc-connection-url a:hover {
+  text-decoration: underline;
+}
 
 .lnc-category-section, .lnc-notes-section { margin-bottom: 16px; }
 .lnc-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -126,6 +185,34 @@
 .lnc-toast.success { background-color: #2ECC71; }
 .lnc-toast.error { background-color: #E74C3C; }
 .lnc-toast.info { background-color: #3498DB; }
+
+/* Refresh Notice */
+.lnc-refresh-notice {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background-color: #0a66c2;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  z-index: 9999;
+  font-family: -apple-system, system-ui, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  max-width: 280px;
+  animation: lnc-slide-in 0.3s ease-out;
+}
+
+.lnc-refresh-btn {
+  background-color: white;
+  color: #0a66c2;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+}
 
 /* For our custom container if needed */
 .lnc-custom-container {

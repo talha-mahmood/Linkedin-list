@@ -95,7 +95,10 @@
           <h4>Data Management</h4>
           <div class="form-group">
             <button id="export-data-btn" class="secondary-btn">Export Data</button>
-            <p class="help-text">Download all categories and connections.</p>
+            <p class="help-text">Export all profiles with names, URLs, categories and notes.</p>
+            <div class="export-stats" id="export-stats">
+              <span id="export-connections-count">0</span> profiles across <span id="export-categories-count">0</span> categories
+            </div>
           </div>
           <div class="form-group">
             <label for="import-data">Import Data</label>
@@ -141,33 +144,37 @@
       <div class="modal-body">
         <div class="form-group">
           <label for="category-name">Category Name</label>
-          <input type="text" id="category-name" placeholder="e.g., Developers">
+          <input type="text" id="category-name" placeholder="Enter category name">
         </div>
         <div class="form-group">
           <label for="category-color">Color</label>
-          <div class="color-picker">
-            <input type="color" id="category-color" value="#0077B5">
-            <div class="color-presets">
-              <span class="color-preset" style="background-color: #0077B5"></span>
-              <span class="color-preset" style="background-color: #2ECC71"></span>
-              <span class="color-preset" style="background-color: #E74C3C"></span>
-              <span class="color-preset" style="background-color: #F39C12"></span>
-              <span class="color-preset" style="background-color: #9B59B6"></span>
-            </div>
-          </div>
+          <input type="color" id="category-color" value="#0077B5">
+          <div class="color-presets"></div>
         </div>
         <div class="form-group">
-          <label for="category-icon">Icon</label>
+          <label>Icon</label>
           <div class="icon-selector" id="icon-selector">
-            <!-- Icons populated by JS -->
+            <!-- Icons will be populated by JavaScript -->
           </div>
         </div>
       </div>
       <div class="modal-footer">
+        <button id="save-category-btn" class="primary-btn">Save</button>
         <button id="cancel-category-btn" class="secondary-btn">Cancel</button>
-        <button id="save-category-btn" class="primary-btn">Save Category</button>
       </div>
     </div>
+  </div>
+
+  <!-- Tab Navigation -->
+  <div class="tab-navigation">
+    <button class="tab-btn active" data-tab="categories">Categories</button>
+    <button class="tab-btn" data-tab="connections">Connections</button>
+    <button id="settings-tab-btn" class="icon-btn" title="Settings" data-tab="settings">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
   </div>
 
   <script src="js/popup.js"></script>

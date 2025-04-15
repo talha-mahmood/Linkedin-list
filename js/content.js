@@ -11,27 +11,89 @@
     panelVisible: false
   };
 
+  // --- Helper Functions ---
+  function safeCallChromeAPI(apiCall, fallback = null, logError = true) {
+    try {
+      return apiCall();
+    } catch (error) {
+      if (error.message.includes("Extension context invalidated")) {
+        if (logError) console.log(`${EXTENSION_PREFIX}: Extension context invalidated - please refresh the page.`);
+        showPageRefreshNotice();
+        return fallback;
+      } else if (logError) {
+        console.error(`${EXTENSION_PREFIX}: Chrome API error:`, error);
+      }
+      return fallback;
+    }
+  }
+
+  function showPageRefreshNotice() {
+    if (document.getElementById(`${EXTENSION_PREFIX}-refresh-notice`)) return;
+
+    const notice = document.createElement('div');
+    notice.id = `${EXTENSION_PREFIX}-refresh-notice`;
+    notice.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background-color: #0a66c2;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      z-index: 9999;
+      font-family: -apple-system, system-ui, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      max-width: 280px;
+    `;
+    notice.innerHTML = `
+      <div style="margin-bottom: 8px; font-weight: 600;">LinkedIn Categorizer</div>
+      <div>Extension has been updated. Please refresh the page to continue using the categorizer.</div>
+      <div style="margin-top: 10px; text-align: right;">
+        <button id="${EXTENSION_PREFIX}-refresh-page-btn" style="
+          background-color: white;
+          color: #0a66c2;
+          border: none;
+          padding: 6px 12px;
+          border-radius: 16px;
+          font-weight: 600;
+          cursor: pointer;
+        ">Refresh Page</button>
+      </div>
+    `;
+    document.body.appendChild(notice);
+
+    document.getElementById(`${EXTENSION_PREFIX}-refresh-page-btn`).addEventListener('click', () => {
+      window.location.reload();
+    });
+  }
+
   // --- Initialization ---
   function initialize() {
     console.log(`${EXTENSION_PREFIX}: Initializing extension`);
-    chrome.storage.local.get(['categories', 'connections'], function(data) {
-      state.categories = data.categories || [];
-      state.connections = data.connections || [];
-      observePageChanges();
-      checkForProfilePage(); // Initial check
+
+    safeCallChromeAPI(() => {
+      chrome.storage.local.get(['categories', 'connections'], function(data) {
+        state.categories = data.categories || [];
+        state.connections = data.connections || [];
+        observePageChanges();
+        checkForProfilePage();
+      });
+      chrome.runtime.onMessage.addListener(handleMessages);
     });
-    chrome.runtime.onMessage.addListener(handleMessages);
   }
 
   // --- Event Handling & Observation ---
   function handleMessages(message, sender, sendResponse) {
     if (message.action === 'categoriesUpdated' || message.action === 'connectionsUpdated') {
-      chrome.storage.local.get(['categories', 'connections'], function(data) {
-        state.categories = data.categories || [];
-        state.connections = data.connections || [];
-        if (state.panelVisible) {
-          updateCategoryPanel(); // Refresh panel if open
-        }
+      safeCallChromeAPI(() => {
+        chrome.storage.local.get(['categories', 'connections'], function(data) {
+          state.categories = data.categories || [];
+          state.connections = data.connections || [];
+          if (state.panelVisible) {
+            updateCategoryPanel();
+          }
+        });
       });
     }
   }
@@ -39,7 +101,6 @@
   function observePageChanges() {
     console.log(`${EXTENSION_PREFIX}: Setting up page observer`);
     const observer = new MutationObserver(mutations => {
-      // Use requestAnimationFrame for performance
       window.requestAnimationFrame(checkForProfilePage);
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -54,17 +115,15 @@
     if (profileMatch && profileMatch[1]) {
       const profileId = profileMatch[1];
       console.log(`${EXTENSION_PREFIX}: On profile page for: ${profileId}`);
-      
+
       if (profileId !== state.currentProfileId) {
-         state.currentProfileId = profileId;
-         hidePanel();
-         if (buttonExists) buttonExists.remove(); // Clean up
+        state.currentProfileId = profileId;
+        hidePanel();
+        if (buttonExists) buttonExists.remove();
       }
 
       if (!document.getElementById(BUTTON_ID)) {
         console.log(`${EXTENSION_PREFIX}: Button not found, attempting to inject`);
-        
-        // IMPROVED APPROACH: Find multiple potential containers and try each
         const containerSelectors = [
           '.pv-top-card__actions',
           '.pv-top-card-v2__actions',
@@ -73,38 +132,34 @@
           '.pv-s-profile-actions',
           '.pv-top-card__action-buttons',
           '.profile-header__actions',
-          // Add additional possible selectors to increase chance of finding a container
           'section.artdeco-card.ember-view.pv-top-card',
-          '.ph5.pb5' // More general container that might contain actions
+          '.ph5.pb5'
         ];
-        
-        // Step 1: Try explicit containers first
+
         for (const selector of containerSelectors) {
           const container = document.querySelector(selector);
           if (container) {
             console.log(`${EXTENSION_PREFIX}: Found container using selector: ${selector}`);
             insertCategorizeButton(container);
-            return; // Exit once button is injected
+            return;
           }
         }
-        
-        // Step 2: If no containers found, try to find by looking for other LinkedIn buttons
+
         const buttonSelectors = [
-          'button[aria-label*="Connect"]', 
+          'button[aria-label*="Connect"]',
           'button[aria-label*="Message"]',
           'button[aria-label*="Follow"]',
           'button[aria-label*="More actions"]',
-          // More general button selectors
           '.artdeco-button'
         ];
-        
+
         for (const selector of buttonSelectors) {
           const linkedinButton = document.querySelector(selector);
           if (linkedinButton) {
-            let container = linkedinButton.closest('.pv-top-card__actions') || 
-                           linkedinButton.closest('.pvs-profile-actions') || 
-                           linkedinButton.parentElement;
-                           
+            let container = linkedinButton.closest('.pv-top-card__actions') ||
+              linkedinButton.closest('.pvs-profile-actions') ||
+              linkedinButton.parentElement;
+
             if (container) {
               console.log(`${EXTENSION_PREFIX}: Found container via LinkedIn button: ${selector}`);
               insertCategorizeButton(container);
@@ -113,22 +168,17 @@
           }
         }
 
-        // Step 3: If still not inserted, try again after a delay (LinkedIn might be loading)
         console.log(`${EXTENSION_PREFIX}: Scheduling delayed injection attempt`);
         setTimeout(() => {
           if (!document.getElementById(BUTTON_ID)) {
-            // Final attempt - look for any section near the top that might hold our button
             const headingElement = document.querySelector('h1.text-heading-xlarge');
             if (headingElement) {
               let possibleContainer = null;
-              
-              // Try to find a container by navigating up from the name heading
               let element = headingElement;
-              for (let i = 0; i < 5; i++) { // Check up to 5 levels up
+              for (let i = 0; i < 5; i++) {
                 element = element.parentElement;
                 if (!element || element === document.body) break;
-                
-                // Look for child elements that look like button containers
+
                 const childDivs = element.querySelectorAll('div');
                 for (const div of childDivs) {
                   if (div.querySelector('button') || div.childElementCount > 1) {
@@ -138,47 +188,44 @@
                 }
                 if (possibleContainer) break;
               }
-              
+
               if (possibleContainer) {
                 console.log(`${EXTENSION_PREFIX}: Found potential container via DOM traversal`);
                 insertCategorizeButton(possibleContainer);
               } else {
                 console.log(`${EXTENSION_PREFIX}: Creating our own button container as last resort`);
-                // Create our own container as last resort
                 const newContainer = document.createElement('div');
                 newContainer.className = 'lnc-custom-container';
                 newContainer.style.margin = '10px 0';
-                
-                // Insert after the heading or nearby
+
                 if (headingElement.nextElementSibling) {
                   headingElement.parentElement.insertBefore(newContainer, headingElement.nextElementSibling);
                 } else {
                   headingElement.parentElement.appendChild(newContainer);
                 }
-                
+
                 insertCategorizeButton(newContainer);
               }
             }
           }
-        }, 2000); // Wait 2 seconds for LinkedIn to fully render
+        }, 2000);
       }
     } else {
-      // Not on a profile page
       if (state.currentProfileId) {
         console.log(`${EXTENSION_PREFIX}: Navigated away from profile`);
         state.currentProfileId = null;
         hidePanel();
       }
-      
+
       if (buttonExists) buttonExists.remove();
     }
   }
 
   function insertCategorizeButton(container) {
     if (document.getElementById(BUTTON_ID)) {
-      return; // Prevent duplication
+      return;
     }
-    
+
     console.log(`${EXTENSION_PREFIX}: Creating button`);
     const button = document.createElement('button');
     button.id = BUTTON_ID;
@@ -187,15 +234,14 @@
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
         <path d="M10 1L9 0H2a1 1 0 00-1 1v11a1 1 0 001 1h1V3a1 1 0 011-1h6zm5 2H5a1 1 0 00-1 1v11a1 1 0 001 1h10a1 1 0 001-1V4a1 1 0 00-1-1zM8 6h5v1H8zm5 3H8v1h5zM8 11h5v1H8z"></path>
       </svg>
-      <span class="artdeco-button__text">Categorize</span>`;
+      <span class="artdeco-button__text">Add to List</span>`;
     button.style.marginLeft = '8px';
     button.addEventListener('click', toggleCategoryPanel);
 
     try {
-      // First try to place it next to other buttons
       const moreButton = container.querySelector('button[aria-label*="More actions"]');
       const connectButton = container.querySelector('button[aria-label*="Connect"], button[aria-label*="Message"], button[aria-label*="Follow"]');
-      
+
       if (moreButton) {
         container.insertBefore(button, moreButton);
       } else if (connectButton) {
@@ -205,15 +251,13 @@
           container.appendChild(button);
         }
       } else {
-        // Just append it
         container.appendChild(button);
       }
-      
+
       console.log(`${EXTENSION_PREFIX}: Button added successfully`);
     } catch (error) {
       console.error(`${EXTENSION_PREFIX}: Error adding button:`, error);
       try {
-        // Fallback
         container.appendChild(button);
       } catch (e) {
         console.error(`${EXTENSION_PREFIX}: Final attempt failed:`, e);
@@ -226,46 +270,76 @@
     if (state.panelVisible) {
       hidePanel();
     } else {
-      chrome.storage.local.get(['categories', 'connections'], function(data) {
+      safeCallChromeAPI(() => {
+        chrome.storage.local.get(['categories', 'connections'], function(data) {
           state.categories = data.categories || [];
           state.connections = data.connections || [];
           showPanel();
+        });
+      }, () => {
+        showAPIErrorPanel();
       });
     }
   }
 
+  function showAPIErrorPanel() {
+    hidePanel();
+
+    const panel = document.createElement('div');
+    panel.id = `${EXTENSION_PREFIX}-categorizer-panel`;
+    panel.className = `${EXTENSION_PREFIX}-categorizer-panel`;
+
+    panel.innerHTML = `
+      <div class="${EXTENSION_PREFIX}-panel-header">
+        <h3>Categorizer Error</h3>
+        <button class="${EXTENSION_PREFIX}-panel-close">&times;</button>
+      </div>
+      <div class="${EXTENSION_PREFIX}-panel-body">
+        <p>The extension context has been invalidated. Please refresh the page to continue using the LinkedIn Categorizer.</p>
+        <button id="${EXTENSION_PREFIX}-refresh-btn" class="artdeco-button artdeco-button--primary">Refresh Page</button>
+      </div>
+    `;
+
+    document.body.appendChild(panel);
+    panel.querySelector(`.${EXTENSION_PREFIX}-panel-close`).addEventListener('click', hidePanel);
+    panel.querySelector(`#${EXTENSION_PREFIX}-refresh-btn`).addEventListener('click', () => {
+      window.location.reload();
+    });
+
+    state.panelVisible = true;
+  }
+
   function showPanel() {
-    hidePanel(); // Ensure only one panel exists
+    hidePanel();
 
     const panel = document.createElement('div');
     panel.id = `${EXTENSION_PREFIX}-categorizer-panel`;
     panel.className = `${EXTENSION_PREFIX}-categorizer-panel`;
 
     const profileData = extractProfileData();
+    const profileUrl = window.location.href;
     const connection = state.connections.find(c => c.id === state.currentProfileId) || {
       id: state.currentProfileId,
       name: profileData.name,
-      title: profileData.title,
-      avatar: profileData.avatar,
-      profileUrl: window.location.href,
+      profileUrl: profileUrl,
       categories: [],
-      notes: '',
       addedAt: Date.now()
     };
 
     panel.innerHTML = `
       <div class="${EXTENSION_PREFIX}-panel-header">
-        <h3>Categorize Connection</h3>
+        <h3>Add to List</h3>
         <button class="${EXTENSION_PREFIX}-panel-close">&times;</button>
       </div>
       <div class="${EXTENSION_PREFIX}-panel-body">
         <div class="${EXTENSION_PREFIX}-connection-info">
-          <div class="${EXTENSION_PREFIX}-connection-avatar">
-            <img src="${profileData.avatar || chrome.runtime.getURL('assets/icons/icon48.png')}" alt="${profileData.name}">
-          </div>
           <div class="${EXTENSION_PREFIX}-connection-details">
-            <div class="${EXTENSION_PREFIX}-connection-name">${profileData.name}</div>
-            <div class="${EXTENSION_PREFIX}-connection-title">${profileData.title || ''}</div>
+            <div class="${EXTENSION_PREFIX}-connection-name"><strong>${profileData.name}</strong></div>
+            <div class="${EXTENSION_PREFIX}-connection-url">
+              <a href="${profileUrl}" target="_blank" title="Open in new tab">
+                ${profileUrl}
+              </a>
+            </div>
           </div>
         </div>
         <div class="${EXTENSION_PREFIX}-category-section">
@@ -276,12 +350,6 @@
           <div class="${EXTENSION_PREFIX}-category-list" id="${EXTENSION_PREFIX}-category-list">
             ${generateCategoryCheckboxes(connection.categories)}
           </div>
-        </div>
-        <div class="${EXTENSION_PREFIX}-notes-section">
-          <div class="${EXTENSION_PREFIX}-section-header">
-            <div class="${EXTENSION_PREFIX}-section-title">Notes</div>
-          </div>
-          <textarea class="${EXTENSION_PREFIX}-notes-input" placeholder="Add notes...">${connection.notes || ''}</textarea>
         </div>
       </div>
       <div class="${EXTENSION_PREFIX}-panel-footer">
@@ -306,10 +374,10 @@
   }
 
   function updateCategoryPanel() {
-      const categoryList = document.getElementById(`${EXTENSION_PREFIX}-category-list`);
-      if (!categoryList) return;
-      const connection = state.connections.find(c => c.id === state.currentProfileId) || { categories: [] };
-      categoryList.innerHTML = generateCategoryCheckboxes(connection.categories);
+    const categoryList = document.getElementById(`${EXTENSION_PREFIX}-category-list`);
+    if (!categoryList) return;
+    const connection = state.connections.find(c => c.id === state.currentProfileId) || { categories: [] };
+    categoryList.innerHTML = generateCategoryCheckboxes(connection.categories);
   }
 
   // --- Data Handling ---
@@ -343,18 +411,14 @@
 
   function saveConnection() {
     const selectedCategories = Array.from(document.querySelectorAll(`.${EXTENSION_PREFIX}-category-checkbox:checked`))
-                                  .map(cb => cb.getAttribute('data-category-id'));
-    const notes = document.querySelector(`.${EXTENSION_PREFIX}-notes-input`).value;
+      .map(cb => cb.getAttribute('data-category-id'));
     const profileData = extractProfileData();
 
     const connection = {
       id: state.currentProfileId,
       name: profileData.name,
-      title: profileData.title,
-      avatar: profileData.avatar,
       profileUrl: window.location.href,
       categories: selectedCategories,
-      notes: notes,
       addedAt: state.connections.find(c => c.id === state.currentProfileId)?.addedAt || Date.now(),
       updatedAt: Date.now()
     };
@@ -366,15 +430,43 @@
       state.connections.push(connection);
     }
 
-    chrome.storage.local.set({ connections: state.connections }, function() {
-      showToast('Connection categorized successfully!');
+    safeCallChromeAPI(() => {
+      chrome.storage.local.set({ connections: state.connections }, function() {
+        showToast('Connection categorized successfully!');
+        hidePanel();
+        try {
+          chrome.runtime.sendMessage({ action: 'connectionsUpdated' }).catch(err => {});
+        } catch (err) {}
+      });
+    }, () => {
       hidePanel();
-      chrome.runtime.sendMessage({ action: 'connectionsUpdated' }).catch(err => {});
+      showToast('Error saving connection - please refresh the page', 'error');
     });
   }
 
   function openCreateCategoryModal() {
-    chrome.runtime.sendMessage({ action: 'openCategoryModal' });
+    console.log(`${EXTENSION_PREFIX}: Attempting to open category modal`);
+    
+    // First try to use chrome.runtime API safely
+    safeCallChromeAPI(() => {
+      chrome.runtime.sendMessage({ 
+        action: 'openCategoryModal',
+        source: 'content_script',
+        fromProfileId: state.currentProfileId,
+        profileData: extractProfileData()
+      }, (response) => {
+        if (!response || !response.success) {
+          // If no response or failed, show a message to the user
+          showToast('Please click the extension icon to add a new category', 'info');
+        }
+      });
+    }, () => {
+      // Fallback if API call fails
+      showToast('Please open the extension popup to add new categories', 'info');
+    });
+    
+    // Show guidance toast regardless
+    showToast('Opening category creator...', 'info');
   }
 
   function showToast(message, type = 'success') {
@@ -393,5 +485,15 @@
 
   // --- Start ---
   console.log(`${EXTENSION_PREFIX}: Content script loaded`);
-  initialize();
+  try {
+    if (chrome.runtime && chrome.runtime.id) {
+      initialize();
+    } else {
+      console.error(`${EXTENSION_PREFIX}: Chrome runtime not available`);
+      showPageRefreshNotice();
+    }
+  } catch (err) {
+    console.error(`${EXTENSION_PREFIX}: Error during initialization`, err);
+    showPageRefreshNotice();
+  }
 })();
