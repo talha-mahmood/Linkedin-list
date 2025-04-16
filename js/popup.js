@@ -94,6 +94,7 @@ document.addEventListener('DOMContentLoaded', function() {
           }
         }
       });
+      updateExportCategorySelector(); // Update export category selector
     });
   }
 
@@ -141,6 +142,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     categoriesContainer.innerHTML = html;
     addCategoryActionListeners();
+    updateExportCategorySelector(); // Update export category selector
   }
 
   function renderConnections() {
@@ -531,16 +533,36 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function handleExportData() {
-      showStatusMessage('Exporting data...', 'info');
+      showStatusMessage('Preparing export...', 'info');
       
-      // First check if there are connections to export
-      if (!state.connections || state.connections.length === 0) {
+      // Get the selected category ID
+      const exportCategorySelect = document.getElementById('export-category');
+      const selectedCategoryId = exportCategorySelect ? exportCategorySelect.value : 'all';
+      
+      // Count connections for the selected category
+      let connectionCount = state.connections.length;
+      if (selectedCategoryId !== 'all') {
+        connectionCount = state.connections.filter(conn => 
+          conn.categories?.includes(selectedCategoryId)
+        ).length;
+        
+        // Check if there are any connections in this category
+        if (connectionCount === 0) {
+          showStatusMessage('No connections in the selected category to export', 'error');
+          setTimeout(hideStatusMessage, 2000);
+          return;
+        }
+      } else if (connectionCount === 0) {
         showStatusMessage('No connections to export', 'error');
         setTimeout(hideStatusMessage, 2000);
         return;
       }
       
-      chrome.runtime.sendMessage({ action: 'exportData' }, function(response) {
+      // Send request to export with the selected category
+      chrome.runtime.sendMessage({ 
+        action: 'exportData',
+        categoryId: selectedCategoryId
+      }, function(response) {
         if (response?.success && response.data) {
           // Create a blob from the data in the popup context
           const blob = new Blob([response.data], { type: 'application/json' });
@@ -550,7 +572,7 @@ document.addEventListener('DOMContentLoaded', function() {
           const a = document.createElement('a');
           a.style.display = 'none';
           a.href = url;
-          a.download = response.filename || `linkedin-connections-export-${new Date().toISOString().split('T')[0]}.json`;
+          a.download = response.filename;
           document.body.appendChild(a);
           a.click();
           
@@ -560,11 +582,11 @@ document.addEventListener('DOMContentLoaded', function() {
             URL.revokeObjectURL(url); 
           }, 100);
           
-          showStatusMessage(`Exported ${response.count} connections!`, 'success');
+          showStatusMessage(`Exported ${response.count} connections from "${response.category}"`, 'success');
         } else {
           showStatusMessage('Export failed: ' + (response?.error || 'Unknown error'), 'error');
         }
-        setTimeout(hideStatusMessage, 2000);
+        setTimeout(hideStatusMessage, 3000);
       });
   }
 
@@ -737,6 +759,32 @@ document.addEventListener('DOMContentLoaded', function() {
         return '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line>';
       default:
         return '<circle cx="12" cy="12" r="10"></circle>'; // Default circle as fallback
+    }
+  }
+
+  function updateExportCategorySelector() {
+    const exportCategorySelect = document.getElementById('export-category');
+    if (!exportCategorySelect) return;
+    
+    // Save current selection if it exists
+    const currentSelection = exportCategorySelect.value || 'all';
+    
+    // Build options HTML
+    let optionsHtml = '<option value="all">All Categories</option>';
+    
+    state.categories.forEach(category => {
+      const connectionCount = state.connections.filter(c => c.categories?.includes(category.id)).length;
+      optionsHtml += `<option value="${category.id}">${category.name} (${connectionCount})</option>`;
+    });
+    
+    exportCategorySelect.innerHTML = optionsHtml;
+    
+    // Try to restore previous selection if it still exists
+    if (currentSelection) {
+      const optionExists = Array.from(exportCategorySelect.options).some(opt => opt.value === currentSelection);
+      if (optionExists) {
+        exportCategorySelect.value = currentSelection;
+      }
     }
   }
 

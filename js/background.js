@@ -76,7 +76,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === 'exportData') {
-    exportData(sendResponse);
+    exportData(request.categoryId, sendResponse);
     return true; // Indicates async response
   }
 
@@ -121,17 +121,34 @@ function generateMockConnections() {
     ];
 }
 
-function exportData(sendResponse) {
+function exportData(categoryId, sendResponse) {
   chrome.storage.local.get(['categories', 'connections'], function(data) {
-    // Format data for export, focusing only on profileUrl and categories
+    // Format data for export, optionally filtering by category
     const exportData = {
       timestamp: new Date().toISOString(),
       connections: []
     };
     
-    // Process each connection
-    if (data.connections && data.connections.length > 0) {
-      data.connections.forEach(connection => {
+    // Get the category name if a specific category was requested
+    let categoryName = "All Categories";
+    if (categoryId && categoryId !== 'all') {
+      const category = data.categories?.find(c => c.id === categoryId);
+      if (category) {
+        categoryName = category.name;
+      }
+    }
+    
+    // Filter connections if a specific category was requested
+    let filteredConnections = data.connections || [];
+    if (categoryId && categoryId !== 'all') {
+      filteredConnections = filteredConnections.filter(conn => 
+        conn.categories && conn.categories.includes(categoryId)
+      );
+    }
+    
+    // Process each filtered connection
+    if (filteredConnections.length > 0) {
+      filteredConnections.forEach(connection => {
         // Get readable category names instead of just IDs
         const categoryNames = (connection.categories || []).map(catId => {
           const category = (data.categories || []).find(c => c.id === catId);
@@ -150,17 +167,19 @@ function exportData(sendResponse) {
       // Send the raw JSON data to the popup
       const jsonData = JSON.stringify(exportData, null, 2);
       
-      // Generate filename with date
+      // Generate filename with date and category
       const date = new Date();
       const dateString = date.toISOString().split('T')[0];
-      const filename = `linkedin-connections-${dateString}.json`;
+      const categorySlug = categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const filename = `linkedin-connections-${categorySlug}-${dateString}.json`;
       
       // Return the export data
       sendResponse({
         success: true,
         data: jsonData,
         filename: filename,
-        count: exportData.connections.length
+        count: exportData.connections.length,
+        category: categoryName
       });
     } catch (error) {
       console.error("Export error:", error);
