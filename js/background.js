@@ -123,70 +123,104 @@ function generateMockConnections() {
 
 function exportData(categoryId, sendResponse) {
   chrome.storage.local.get(['categories', 'connections'], function(data) {
-    // Format data for export, optionally filtering by category
-    const exportData = {
-      timestamp: new Date().toISOString(),
-      connections: []
-    };
+    // Get the selected category if specified
+    const selectedCategory = categoryId && categoryId !== 'all' ? 
+      data.categories?.find(c => c.id === categoryId) : null;
     
-    // Get the category name if a specific category was requested
-    let categoryName = "All Categories";
-    if (categoryId && categoryId !== 'all') {
-      const category = data.categories?.find(c => c.id === categoryId);
-      if (category) {
-        categoryName = category.name;
-      }
-    }
-    
-    // Filter connections if a specific category was requested
-    let filteredConnections = data.connections || [];
-    if (categoryId && categoryId !== 'all') {
-      filteredConnections = filteredConnections.filter(conn => 
+    // If exporting a single category
+    if (selectedCategory) {
+      // Create a simpler export format with just URLs
+      const exportData = {
+        timestamp: new Date().toISOString(),
+        category: selectedCategory.name,
+        urls: []
+      };
+      
+      // Filter connections for this category and extract just the URLs
+      const filteredConnections = data.connections?.filter(conn => 
         conn.categories && conn.categories.includes(categoryId)
-      );
-    }
-    
-    // Process each filtered connection
-    if (filteredConnections.length > 0) {
+      ) || [];
+      
+      // Add only the URLs to the export data
       filteredConnections.forEach(connection => {
-        // Get readable category names instead of just IDs
-        const categoryNames = (connection.categories || []).map(catId => {
-          const category = (data.categories || []).find(c => c.id === catId);
-          return category ? category.name : 'Unknown Category';
+        if (connection.profileUrl) {
+          exportData.urls.push(connection.profileUrl);
+        }
+      });
+      
+      try {
+        const jsonData = JSON.stringify(exportData, null, 2);
+        const date = new Date();
+        const dateString = date.toISOString().split('T')[0];
+        const categorySlug = selectedCategory.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const filename = `linkedin-${categorySlug}-urls-${dateString}.json`;
+        
+        sendResponse({
+          success: true,
+          data: jsonData,
+          filename: filename,
+          count: exportData.urls.length,
+          category: selectedCategory.name
+        });
+      } catch (error) {
+        console.error("Export error:", error);
+        sendResponse({
+          success: false,
+          error: "Failed to generate export file: " + error.message
+        });
+      }
+    } 
+    // If exporting all categories
+    else {
+      // Create an object with categories as keys and arrays of URLs as values
+      const exportData = {
+        timestamp: new Date().toISOString(),
+        categories: {}
+      };
+      
+      // Initialize empty arrays for each category
+      data.categories?.forEach(category => {
+        exportData.categories[category.name] = [];
+      });
+      
+      // Add URLs to the appropriate categories
+      data.connections?.forEach(connection => {
+        if (connection.profileUrl && connection.categories) {
+          connection.categories.forEach(catId => {
+            const category = data.categories?.find(c => c.id === catId);
+            if (category && category.name) {
+              exportData.categories[category.name].push(connection.profileUrl);
+            }
+          });
+        }
+      });
+      
+      try {
+        const jsonData = JSON.stringify(exportData, null, 2);
+        const date = new Date();
+        const dateString = date.toISOString().split('T')[0];
+        const filename = `linkedin-all-categories-urls-${dateString}.json`;
+        
+        // Count total URLs
+        let totalUrls = 0;
+        Object.values(exportData.categories).forEach(urls => {
+          totalUrls += urls.length;
         });
         
-        // Add connection WITHOUT name field - only profileUrl and categories
-        exportData.connections.push({
-          profileUrl: connection.profileUrl || 'No URL',
-          categories: categoryNames
+        sendResponse({
+          success: true,
+          data: jsonData,
+          filename: filename,
+          count: totalUrls,
+          category: "All Categories"
         });
-      });
-    }
-    
-    try {
-      // Send the raw JSON data to the popup
-      const jsonData = JSON.stringify(exportData, null, 2);
-      
-      // Generate filename with date and category
-      const date = new Date();
-      const dateString = date.toISOString().split('T')[0];
-      const categorySlug = categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-      const filename = `linkedin-connections-${categorySlug}-${dateString}.json`;
-      
-      // Return the export data
-      sendResponse({
-        success: true,
-        data: jsonData,
-        filename: filename,
-        count: exportData.connections.length,
-        category: categoryName
-      });
-    } catch (error) {
-      console.error("Export error:", error);
-      sendResponse({
-        success: false,
-        error: "Failed to generate export file: " + error.message
-      });
+      } catch (error) {
+        console.error("Export error:", error);
+        sendResponse({
+          success: false,
+          error: "Failed to generate export file: " + error.message
+        });
+      }
     }
   });
 }

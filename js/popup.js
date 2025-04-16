@@ -582,7 +582,11 @@ document.addEventListener('DOMContentLoaded', function() {
             URL.revokeObjectURL(url); 
           }, 100);
           
-          showStatusMessage(`Exported ${response.count} connections from "${response.category}"`, 'success');
+          const exportMessage = selectedCategoryId === 'all' 
+            ? `Exported URLs from all categories (${response.count} total URLs)`
+            : `Exported ${response.count} URLs from "${response.category}"`;
+          
+          showStatusMessage(exportMessage, 'success');
         } else {
           showStatusMessage('Export failed: ' + (response?.error || 'Unknown error'), 'error');
         }
